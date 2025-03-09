@@ -47,11 +47,11 @@ namespace Szeminarium1
 
             graphicWindow = Window.Create(windowOptions);
 
-            graphicWindow.Load += GraphicWindow_Load;
-            graphicWindow.Update += GraphicWindow_Update;
-            graphicWindow.Render += GraphicWindow_Render;
+            graphicWindow.Load += GraphicWindow_Load;//feher abalk + error
+            graphicWindow.Update += GraphicWindow_Update;//nincs kulonbseg
+            graphicWindow.Render += GraphicWindow_Render; //fekete ablak ha ezt a sort torlom
 
-            graphicWindow.Run();
+            graphicWindow.Run();//enelkul semmit nem tortenik
         }
 
         private static void GraphicWindow_Load()
@@ -116,23 +116,20 @@ namespace Szeminarium1
             };
 
             float[] colorArray = new float[] {
-                1.0f, 0.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
+                1.0f, 0.0f, 0.0f, 1.0f //ha egy szint adok meg a tobbi csucs fekete lesz
             };
 
             uint[] indexArray = new uint[] {
-                0, 1, 2,
-                2, 1, 3
+                2, 1, 3, //mindegy a sorrend
+                0, 1, 2
             };
 
             uint vertices = Gl.GenBuffer();
+            Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)vertexArray.AsSpan(), GLEnum.StaticDraw);//feher ablak
+            Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, null);//feher ablak
             Gl.BindBuffer(GLEnum.ArrayBuffer, vertices);
-            Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)vertexArray.AsSpan(), GLEnum.StaticDraw);
-            Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, null);
-            Gl.EnableVertexAttribArray(0);
-
+            Gl.EnableVertexAttribArray(0);//feher ablak
+            //a sorrendet sem lehet felcserelni
             uint colors = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ArrayBuffer, colors);
             Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)colorArray.AsSpan(), GLEnum.StaticDraw);
