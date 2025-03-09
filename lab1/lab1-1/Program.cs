@@ -53,7 +53,14 @@ namespace Szeminarium1
 
             graphicWindow.Run();//enelkul semmit nem tortenik
         }
-
+        private static void CheckGLError(string stepDescription)
+        {
+            GLEnum error;
+            while ((error = Gl.GetError()) != GLEnum.NoError)
+            {
+                Console.WriteLine($"OpenGL error after {stepDescription}: {error}");
+            }
+        }
         private static void GraphicWindow_Load()
         {
             // egszeri beallitasokat
@@ -104,10 +111,10 @@ namespace Szeminarium1
             //Console.WriteLine($"Render after {deltaTime} [s]");
 
             Gl.Clear(ClearBufferMask.ColorBufferBit);
-
+            CheckGLError("Clear Screen");
             uint vao = Gl.GenVertexArray();
             Gl.BindVertexArray(vao);
-
+            CheckGLError("Generate and Bind VAO");
             float[] vertexArray = new float[] {
                 -0.5f, -0.5f, 0.0f,
                 +0.5f, -0.5f, 0.0f,
@@ -130,20 +137,25 @@ namespace Szeminarium1
             uint vertices = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ArrayBuffer, vertices);//feher ablak 
             Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)vertexArray.AsSpan(), GLEnum.StaticDraw);//feher ablak
+            CheckGLError("Buffer Vertex Data");
             Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, null);//feher ablak
             Gl.EnableVertexAttribArray(1);//feher ablak
+            CheckGLError("Set Vertex Attributes");
             //a sorrendet sem lehet felcserelni
             uint colors = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ArrayBuffer, colors);
             Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)colorArray.AsSpan(), GLEnum.StaticDraw);
+            CheckGLError("Buffer Vertex Data");
             Gl.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, 0, null);
             Gl.EnableVertexAttribArray(3);
-
+            CheckGLError("Set Vertex Attributes");
             uint indices = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ElementArrayBuffer, indices);
             Gl.BufferData(GLEnum.ElementArrayBuffer, (ReadOnlySpan<uint>)indexArray.AsSpan(), GLEnum.StaticDraw);
             Gl.BindBuffer(GLEnum.ArrayBuffer, 0);
+            CheckGLError("Buffer Vertex Data");
             Gl.UseProgram(program);
+            CheckGLError("Draw Call");
 
             Gl.DrawElements(GLEnum.Triangles, (uint)indexArray.Length, GLEnum.UnsignedInt, null); // we used element buffer
             Gl.BindBuffer(GLEnum.ElementArrayBuffer, 0);
