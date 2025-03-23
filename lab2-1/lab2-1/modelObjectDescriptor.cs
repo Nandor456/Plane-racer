@@ -26,7 +26,8 @@ namespace GrafikaSzeminarium
             uint vao = Gl.GenVertexArray();
             Gl.BindVertexArray(vao);
 
-            float s = 0.5f; // Cube size
+            float s = 0.5f;// Cube size
+            float sf = 0.6f;
 
             var vertexArray = new float[27 * 24 * 3]; // 27 cubes, 24 vertices per cube, 3 coordinates per vertex
             var colorArray = new float[27 * 24 * 4];  // 27 cubes, 24 vertices, 4 color channels (RGBA)
@@ -39,11 +40,12 @@ namespace GrafikaSzeminarium
 
             Random rand = new Random();
 
-            for (float x = -1; x <= 0; x += s)
+            for (float x = -1; x <= 0.3f; x += sf)
             {
-                for (float y = -1; y <= 0; y += s)
+                Console.WriteLine(x);
+                for (float y = -1; y <= 0.3f; y += sf)
                 {
-                    for (float z = -1; z <= 0; z += s)
+                    for (float z = -1; z <= 0.3f; z += sf)
                     {
                         float[] cubeVertices = {
                             //bottom face
@@ -78,14 +80,7 @@ namespace GrafikaSzeminarium
                         // Add vertices
                         for (int i = 0; i < cubeVertices.Length; i++)
                         {
-                            if (i % 3 == 0) {
-                                
-                                Console.WriteLine(")");
-                                Console.Write("(");
-                            }
-                            vertexArray[vertexIndex++] = cubeVertices[i];
-                            Console.Write($"{cubeVertices[i]},");
-                            
+                            vertexArray[vertexIndex++] = cubeVertices[i];   
                         }
 
                         // Add indices
