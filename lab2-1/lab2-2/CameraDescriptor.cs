@@ -1,92 +1,85 @@
-﻿
-using Silk.NET.Maths;
+﻿using Silk.NET.Maths;
+using System;
 
 namespace Szeminarium
 {
     internal class CameraDescriptor
     {
-        public double DistanceToOrigin { get; private set; } = 1;
+        public Vector3D<float> Position { get; private set; } = new Vector3D<float>(0, 0, 4);
+        public Vector3D<float> Forward { get; private set; } = new Vector3D<float>(0, 0, -1);
+        public Vector3D<float> Up { get; private set; } = new Vector3D<float>(0, 1, 0);
 
-        public double AngleToZYPlane { get; private set; } = 0;
-
-        public double AngleToZXPlane { get; private set; } = 0;
-
-        const double DistanceScaleFactor = 1.1;
-
-        const double AngleChangeStepSize = Math.PI / 180 * 5;
-
-        /// <summary>
-        /// Gets the position of the camera.
-        /// </summary>
-        public Vector3D<float> Position
-        {
-            get
-            {
-                return GetPointFromAngles(DistanceToOrigin, AngleToZYPlane, AngleToZXPlane);
-            }
-        }
+        private const float MoveSpeed = 0.1f;
+        private const float RotationSpeed = 0.05f;
 
         /// <summary>
         /// Gets the up vector of the camera.
         /// </summary>
-        public Vector3D<float> UpVector
-        {
-            get
-            {
-                return Vector3D.Normalize(GetPointFromAngles(DistanceToOrigin, AngleToZYPlane, AngleToZXPlane + Math.PI / 2));
-            }
-        }
+        public Vector3D<float> UpVector => Up;
 
         /// <summary>
         /// Gets the target point of the camera view.
         /// </summary>
-        public Vector3D<float> Target
+        public Vector3D<float> Target => Position + Forward;
+
+        public void MoveForward()
         {
-            get
-            {
-                // For the moment the camera is always pointed at the origin.
-                return Vector3D<float>.Zero;
-            }
+            Position += Forward * MoveSpeed;
         }
 
-        public void IncreaseZXAngle()
+        public void MoveBackward()
         {
-            AngleToZXPlane += AngleChangeStepSize;
+            Position -= Forward * MoveSpeed;
         }
 
-        public void DecreaseZXAngle()
+        public void MoveLeft()
         {
-            AngleToZXPlane -= AngleChangeStepSize;
+            var right = Vector3D.Normalize(Vector3D.Cross(Forward, Up));
+            Position -= right * MoveSpeed;
         }
 
-        public void IncreaseZYAngle()
+        public void MoveRight()
         {
-            AngleToZYPlane += AngleChangeStepSize;
-
+            var right = Vector3D.Normalize(Vector3D.Cross(Forward, Up));
+            Position += right * MoveSpeed;
         }
 
-        public void DecreaseZYAngle()
+        public void MoveUp()
         {
-            AngleToZYPlane -= AngleChangeStepSize;
+            Position += Up * MoveSpeed;
         }
 
-        public void IncreaseDistance()
+        public void MoveDown()
         {
-            DistanceToOrigin = DistanceToOrigin * DistanceScaleFactor;
+            Position -= Up * MoveSpeed;
         }
 
-        public void DecreaseDistance()
+        public void RotateLeft()
         {
-            DistanceToOrigin = DistanceToOrigin / DistanceScaleFactor;
+            var rotation = Matrix4X4.CreateFromAxisAngle(Up, RotationSpeed);
+            Forward = Vector3D.Transform(Forward, rotation);
         }
 
-        private static Vector3D<float> GetPointFromAngles(double distanceToOrigin, double angleToMinZYPlane, double angleToMinZXPlane)
+        public void RotateRight()
         {
-            var x = distanceToOrigin * Math.Cos(angleToMinZXPlane) * Math.Sin(angleToMinZYPlane);
-            var z = distanceToOrigin * Math.Cos(angleToMinZXPlane) * Math.Cos(angleToMinZYPlane);
-            var y = distanceToOrigin * Math.Sin(angleToMinZXPlane);
+            var rotation = Matrix4X4.CreateFromAxisAngle(Up, -RotationSpeed);
+            Forward = Vector3D.Transform(Forward, rotation);
+        }
 
-            return new Vector3D<float>((float)x, (float)y, (float)z);
+        public void RotateUp()
+        {
+            var right = Vector3D.Normalize(Vector3D.Cross(Forward, Up));
+            var rotation = Matrix4X4.CreateFromAxisAngle(right, RotationSpeed);
+            Forward = Vector3D.Transform(Forward, rotation);
+            Up = Vector3D.Transform(Up, rotation);
+        }
+
+        public void RotateDown()
+        {
+            var right = Vector3D.Normalize(Vector3D.Cross(Forward, Up));
+            var rotation = Matrix4X4.CreateFromAxisAngle(right, -RotationSpeed);
+            Forward = Vector3D.Transform(Forward, rotation);
+            Up = Vector3D.Transform(Up, rotation);
         }
     }
 }
