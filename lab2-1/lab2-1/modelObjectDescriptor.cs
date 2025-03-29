@@ -1,11 +1,5 @@
 ﻿using Silk.NET.OpenGL;
-using Silk.NET.Vulkan;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace GrafikaSzeminarium
 {
@@ -21,12 +15,12 @@ namespace GrafikaSzeminarium
 
         private GL Gl;
 
-        public unsafe static ModelObjectDescriptor CreateCube(GL Gl)
+        public unsafe static ModelObjectDescriptor CreateCube(GL Gl, float[] colorArray)
         {
             uint vao = Gl.GenVertexArray();
             Gl.BindVertexArray(vao);
 
-            // counter clockwise is front facing
+            // Csúcsadatok (ugyanazok minden kockánál)
             var vertexArray = new float[] {
                 -0.5f, 0.5f, 0.5f,
                 0.5f, 0.5f, 0.5f,
@@ -57,39 +51,6 @@ namespace GrafikaSzeminarium
                 0.5f, 0.5f, -0.5f,
                 0.5f, -0.5f, -0.5f,
                 0.5f, -0.5f, 0.5f,
-
-            };
-
-            float[] colorArray = new float[] {
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
-
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-
-                1.0f, 0.0f, 1.0f, 1.0f,
-                1.0f, 0.0f, 1.0f, 1.0f,
-                1.0f, 0.0f, 1.0f, 1.0f,
-                1.0f, 0.0f, 1.0f, 1.0f,
-
-                0.0f, 1.0f, 1.0f, 1.0f,
-                0.0f, 1.0f, 1.0f, 1.0f,
-                0.0f, 1.0f, 1.0f, 1.0f,
-                0.0f, 1.0f, 1.0f, 1.0f,
-
-                1.0f, 1.0f, 0.0f, 1.0f,
-                1.0f, 1.0f, 0.0f, 1.0f,
-                1.0f, 1.0f, 0.0f, 1.0f,
-                1.0f, 1.0f, 0.0f, 1.0f,
             };
 
             uint[] indexArray = new uint[] {
@@ -131,8 +92,15 @@ namespace GrafikaSzeminarium
             Gl.BufferData(GLEnum.ElementArrayBuffer, (ReadOnlySpan<uint>)indexArray.AsSpan(), GLEnum.StaticDraw);
             Gl.BindBuffer(GLEnum.ElementArrayBuffer, 0);
 
-            return new ModelObjectDescriptor() { Vao = vao, Vertices = vertices, Colors = colors, Indices = indices, IndexArrayLength = (uint)indexArray.Length, Gl = Gl };
-
+            return new ModelObjectDescriptor()
+            {
+                Vao = vao,
+                Vertices = vertices,
+                Colors = colors,
+                Indices = indices,
+                IndexArrayLength = (uint)indexArray.Length,
+                Gl = Gl
+            };
         }
 
         protected virtual void Dispose(bool disposing)
@@ -141,14 +109,8 @@ namespace GrafikaSzeminarium
             {
                 if (disposing)
                 {
-                    // TODO: dispose managed state (managed objects)
                 }
 
-                // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-                // TODO: set large fields to null
-
-
-                // always unbound the vertex buffer first, so no halfway results are displayed by accident
                 Gl.DeleteBuffer(Vertices);
                 Gl.DeleteBuffer(Colors);
                 Gl.DeleteBuffer(Indices);
@@ -160,13 +122,11 @@ namespace GrafikaSzeminarium
 
         ~ModelObjectDescriptor()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: false);
         }
 
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
