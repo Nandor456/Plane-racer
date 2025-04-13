@@ -25,7 +25,13 @@ namespace Szeminarium1_24_02_17_2
 
         private static float Shininess = 50;
 
-        private static GlCube glCubeVerticalRectangles;
+        private static GlCube glCubeVerticalRectangles1;
+        private static GlCube glCubeVerticalRectangles2;
+
+        private const int PlankCount = 18;
+        private static readonly float PlankHeight = 2.0f;
+        private static readonly float PlankWidth = 1.0f;
+        private static readonly float PlankThickness = 0.1f;
 
         private const string ModelMatrixVariableName = "uModel";
         private const string NormalMatrixVariableName = "uNormal";
@@ -239,7 +245,8 @@ namespace Szeminarium1_24_02_17_2
             SetViewerPosition();
             SetShininess();
 
-            DrawVerticalRectangles();
+            DrawVerticalRectangles(true, glCubeVerticalRectangles1);
+            DrawVerticalRectangles(false, glCubeVerticalRectangles2);
 
             //ImGuiNET.ImGui.ShowDemoWindow();
             ImGuiNET.ImGui.Begin("Lighting properties",
@@ -267,13 +274,17 @@ namespace Szeminarium1_24_02_17_2
         private static unsafe void SetLightPosition()
         {
             int location = Gl.GetUniformLocation(program, LightPositionVariableName);
-
             if (location == -1)
             {
                 throw new Exception($"{LightPositionVariableName} uniform not found on shader.");
             }
 
-            Gl.Uniform3(location, 0f, 2f, 0f);
+            Vector3D<float> lightPos = new Vector3D<float>(
+                cameraDescriptor.Position.X,
+                cameraDescriptor.Position.Y,
+                cameraDescriptor.Position.Z);
+
+            Gl.Uniform3(location, lightPos.X, lightPos.Y, lightPos.Z);
             CheckError();
         }
 
@@ -303,33 +314,70 @@ namespace Szeminarium1_24_02_17_2
             CheckError();
         }
 
-        private static unsafe void DrawVerticalRectangles()
+        private static float CalculateBarrelRadius()
         {
-            const int rectangleCount = 18;
-            const float radius = 1.0f; // A kör sugara (kisebb, hogy jobban látszódjon)
-            const float rectangleThickness = 0.05f; // Deszka vastagsága
-            float rectangleWidth = 2 * 1.0f * (float)Math.Tan(Math.PI / 18); ;
-            const float rectangleHeight = 2.0f; // Téglalap magassága
+            // Calculate ideal radius where planks touch each other
+            float halfAngleDegrees = 360f / PlankCount / 2f; // 10°
+            float halfAngleRadians = halfAngleDegrees * (MathF.PI / 180f);
+            return (PlankWidth / 2f) / MathF.Sin(halfAngleRadians);
+        }
 
-            for (int i = 0; i < rectangleCount; i++)
+        private static unsafe void DrawVerticalRectangles(bool usePerpendicularNormals, GlCube rect)
+        {
+            const float angleStepDegrees = 360f / PlankCount;
+            float radius = CalculateBarrelRadius();
+            float yOffset = usePerpendicularNormals ? -2f : 2f;
+            float y = 0 + yOffset;
+            for (int i = 0; i < PlankCount; i++)
             {
-                // Szög kiszámítása (0-tól 2π-ig)
-                float angle = (float)(2 * Math.PI * i / rectangleCount);
+                float angleDegrees = angleStepDegrees * i;
+                float angleRadians = angleDegrees * (MathF.PI / 180f);
 
-                // Téglalap pozíciójának kiszámítása a kör mentén
-                float x = radius * (float)Math.Cos(angle);
-                float z = radius * (float)Math.Sin(angle);
+                float x = radius * MathF.Cos(angleRadians);
+                float z = radius * MathF.Sin(angleRadians);
 
-                // Modellmátrix létrehozása: eltolás, forgatás és méretezés
-                var translation = Matrix4X4.CreateTranslation(x, 0, z);
-                var rotation = Matrix4X4.CreateFromYawPitchRoll(-angle, 0, 0);
-                var scale = Matrix4X4.CreateScale(rectangleWidth, rectangleHeight, rectangleWidth); // Vékony, magas téglalap
+                var scale = Matrix4X4.CreateScale(PlankThickness, PlankHeight, PlankWidth);
+                var rotation = Matrix4X4.CreateFromYawPitchRoll(-angleRadians, 0, 0);
+                var translation = Matrix4X4.CreateTranslation(x, y, z);
+
                 var modelMatrix = scale * rotation * translation;
 
+                Matrix3X3<float> normalMatrix;
+                if (usePerpendicularNormals)
+                {
+                    if (Matrix4X4.Invert(modelMatrix, out var inverted))
+                    {
+                        var transposedInverted = Matrix4X4.Transpose(inverted);
+                        normalMatrix = new Matrix3X3<float>(
+                            transposedInverted.M11, transposedInverted.M12, transposedInverted.M13,
+                            transposedInverted.M21, transposedInverted.M22, transposedInverted.M23,
+                            transposedInverted.M31, transposedInverted.M32, transposedInverted.M33);
+                    }
+                    else
+                    {
+                        normalMatrix = Matrix3X3<float>.Identity;
+                    }
+                }
+                else
+                {
+                    float normalAngle = angleRadians + (10f * (MathF.PI / 180f));
+                    Vector3D<float> normal = new Vector3D<float>(
+                        MathF.Cos(normalAngle),
+                        0,
+                        MathF.Sin(normalAngle));
+
+                    normalMatrix = new Matrix3X3<float>(
+                        normal.X, 0, 0,
+                        0, 1, 0,
+                        normal.Z, 0, 0);
+                }
+
                 SetModelMatrix(modelMatrix);
-                Gl.BindVertexArray(glCubeVerticalRectangles.Vao);
-                Gl.DrawElements(GLEnum.Triangles, glCubeVerticalRectangles.IndexArrayLength, GLEnum.UnsignedInt, null);
-                Gl.BindVertexArray(0);
+                int normalLoc = Gl.GetUniformLocation(program, NormalMatrixVariableName);
+                Gl.UniformMatrix3(normalLoc, 1, false, (float*)&normalMatrix);
+
+                Gl.BindVertexArray(rect.Vao);
+                Gl.DrawElements(GLEnum.Triangles, rect.IndexArrayLength, GLEnum.UnsignedInt, null);
             }
         }
 
@@ -372,15 +420,16 @@ namespace Szeminarium1_24_02_17_2
             float[] face5Color = [0.0f, 1.0f, 1.0f, 1.0f];
             float[] face6Color = [1.0f, 1.0f, 0.0f, 1.0f];
 
-            glCubeVerticalRectangles = GlCube.CreateCubeWithFaceColors(Gl, face1Color, face1Color, face3Color, face4Color, face5Color, face6Color);
+            glCubeVerticalRectangles1 = GlCube.CreateCubeWithFaceColors(Gl, face1Color, face1Color, face3Color, face4Color, face5Color, face6Color);
+            glCubeVerticalRectangles2 = GlCube.CreateCubeWithFaceColors(Gl, face1Color, face1Color, face3Color, face4Color, face5Color, face6Color);
         }
 
         
 
         private static void Window_Closing()
         {
-            glCubeVerticalRectangles.ReleaseGlCube();
-            glCubeVerticalRectangles.ReleaseGlCube();
+            glCubeVerticalRectangles1.ReleaseGlCube();
+            glCubeVerticalRectangles2.ReleaseGlCube();
         }
 
         private static unsafe void SetProjectionMatrix()
