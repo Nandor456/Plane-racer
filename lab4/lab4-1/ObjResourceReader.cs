@@ -135,12 +135,12 @@ namespace lab4_1
             objFaces = new List<List<FaceVertex>>();
 
             using (Stream objStream = typeof(ObjResourceReader).Assembly
-                .GetManifestResourceStream("lab4_1.Resources.humanoid_tri.obj"))
+                .GetManifestResourceStream("lab4_1.Resources.tetrahedron.obj"))
             {
                 if (objStream == null)
                 {
                     throw new FileNotFoundException(
-                        "Could not find embedded resource 'lab4_1.Resources.humanoid_tri.obj");
+                        "Could not find embedded resource 'lab4_1.Resources.tetrahedron.obj");
                 }
 
                 using (StreamReader objReader = new StreamReader(objStream))

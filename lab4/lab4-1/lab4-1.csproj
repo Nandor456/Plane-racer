@@ -10,15 +10,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\cessna.obj" />
     <None Remove="Resources\humanoid_tri.obj" />
+    <None Remove="Resources\lamp.obj" />
     <None Remove="Resources\minicooper.obj" />
     <None Remove="Resources\teapot.obj" />
+    <None Remove="Resources\tetrahedron.obj" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\cessna.obj" />
     <EmbeddedResource Include="Resources\humanoid_tri.obj" />
+    <EmbeddedResource Include="Resources\lamp.obj" />
     <EmbeddedResource Include="Resources\minicooper.obj" />
     <EmbeddedResource Include="Resources\teapot.obj" />
+    <EmbeddedResource Include="Resources\tetrahedron.obj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -331,9 +331,9 @@ namespace lab4_1
         private static unsafe void DrawPulsingTeapot()
         {
             // set material uniform to rubber
-
-            var modelMatrixForCenterCube = Matrix4X4.CreateScale((float)cubeArrangementModel.CenterCubeScale);
-            SetModelMatrix(modelMatrixForCenterCube);
+            var rotationX = Matrix4X4.CreateRotationX(MathF.PI + MathF.PI/ 2f);
+            var modelMatrixForNewObject = Matrix4X4.CreateTranslation(0f, 1f, 0f) * Matrix4X4.CreateScale(0.3f) * rotationX;
+            SetModelMatrix(modelMatrixForNewObject);
             Gl.BindVertexArray(teapot.Vao);
             Gl.DrawElements(GLEnum.Triangles, teapot.IndexArrayLength, GLEnum.UnsignedInt, null);
             Gl.BindVertexArray(0);
