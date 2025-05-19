@@ -94,6 +94,7 @@ namespace GrafikaSzeminarium
                 {
                     for (int z = -1; z <= 1; z++)
                     {
+
                         float[] colorArray = GenerateRubikColorArray(x, y, z);
                         cubes.Add(ModelObjectDescriptor.CreateCube(Gl, colorArray));
                         index++;

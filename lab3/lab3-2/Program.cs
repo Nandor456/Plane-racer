@@ -300,7 +300,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void DrawRevolvingCube()
         {
-            // set material uniform to metal
 
             Matrix4X4<float> diamondScale = Matrix4X4.CreateScale(0.25f);
             Matrix4X4<float> rotx = Matrix4X4.CreateRotationX((float)Math.PI / 4f);
@@ -318,8 +317,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void DrawPulsingCenterCube()
         {
-            // set material uniform to rubber
-
             var modelMatrixForCenterCube = Matrix4X4.CreateScale((float)cubeArrangementModel.CenterCubeScale);
             SetModelMatrix(modelMatrixForCenterCube);
             Gl.BindVertexArray(glCubeCentered.Vao);

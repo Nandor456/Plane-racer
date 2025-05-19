@@ -29,11 +29,10 @@ namespace Szeminarium1_24_02_17_2
 
 
         private static float Shininess = 50;
-        private static Vector3 AmbientStrength = new Vector3(0.5f);
+        private static Vector3 AmbientStrength = new Vector3(0.2f);
         private static Vector3 DiffuseStrength = new Vector3(0.3f);
         private static Vector3 SpecularStrength = new Vector3(0.5f);
         private static Vector3 LightColor = Vector3.One;
-        private static int SelectedFace = 0;
         private const string ModelMatrixVariableName = "uModel";
         private const string NormalMatrixVariableName = "uNormal";
         private const string ViewMatrixVariableName = "uView";
@@ -259,7 +258,7 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception($"{LightPositionVariableName} uniform not found on shader.");
             }
 
-            Gl.Uniform3(location, 3f, 3f, 3f);
+            Gl.Uniform3(location, 0f, 2f, 0f);
             CheckError();
         }
 

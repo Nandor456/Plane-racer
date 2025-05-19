@@ -43,7 +43,7 @@ namespace repulo_project
         private static float Shininess = 50;
         private static int ringsPassed = 0;
         private static bool DrawWireFrameOnly = false;
-
+        private static bool gameOver = false;
         private const string ModelMatrixVariableName = "uModel";
         private const string NormalMatrixVariableName = "uNormal";
         private const string ViewMatrixVariableName = "uView";
@@ -190,6 +190,9 @@ namespace repulo_project
 
         private static void Window_Update(double deltaTime)
         {
+            controller.Update((float)deltaTime);
+            if (gameOver)
+                return;
             float dt = (float)deltaTime;
             foreach (var ring in rings)
             {
@@ -231,17 +234,26 @@ namespace repulo_project
                     rollTarget = 0f;
                 }
             }
-            foreach (var ring in rings)
+            if (!gameOver)
             {
-                if (!ring.Passed)
+                foreach (var ring in rings)
                 {
                     float distance = Vector3D.Distance(planePosition, ring.Position);
-                    if (distance < ring.Radius)
+
+                    if (distance < ring.Radius - 2f) // 🟢 Passed through hole (inner area)
                     {
-                        ring.Passed = true;
-                        ringsPassed++;
-                        ring.Color = new Vector4D<float>(1f, 0f, 0f, 1f);
-                        Console.WriteLine($"Passed through ring! Total: {ringsPassed}");
+                        if (!ring.Passed)
+                        {
+                            ring.Passed = true;
+                            ring.Color = new Vector4D<float>(1f, 0f, 0f, 1f); // red
+                            ringsPassed++;
+                            Console.WriteLine($"Passed through ring! Total: {ringsPassed}");
+                        }
+                    }
+                    else if (distance < ring.Radius) // 🔴 Hit the ring thickness
+                    {
+                        Console.WriteLine("Hit the ring! Game Over!");
+                        gameOver = true;
                     }
                 }
             }
@@ -252,7 +264,6 @@ namespace repulo_project
             cameraDescriptor.PlaneYaw = planeYaw;
             cameraDescriptor.CameraInFront = cameraInFront;
             cubeArrangementModel.AdvanceTime(deltaTime);
-            controller.Update((float)deltaTime);
         }
 
         private static unsafe void Window_Render(double deltaTime)
@@ -274,11 +285,16 @@ namespace repulo_project
 
             DrawSkyBox();
             DrawRings();
-            ImGuiNET.ImGui.Begin("Game Info",
-            ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar);
+            ImGuiNET.ImGui.Begin("Game Info");
+
             ImGuiNET.ImGui.Text($"Rings passed: {ringsPassed}");
+            if (gameOver)
+            {
+                ImGuiNET.ImGui.TextColored(new System.Numerics.Vector4(1f, 0f, 0f, 1f), "GAME OVER, you hit a ring");
+            }
             ImGuiNET.ImGui.End();
             controller.Render();
+
         }
 
         private static unsafe void DrawSkyBox()

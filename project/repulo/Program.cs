@@ -4,9 +4,9 @@ using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.OpenGL.Extensions.ImGui;
 using Silk.NET.Windowing;
-using System.Reflection;
+using System.Numerics;
 
-namespace lab4_1
+namespace repulo
 {
     internal static class Program
     {
@@ -24,92 +24,44 @@ namespace lab4_1
 
         private static uint program;
 
-        private static GlObject teapot;
+        private static GlObject plane;
 
         private static GlObject table;
 
-        private static GlObject circle;
-
         private static GlCube glCubeRotating;
 
+        private static GlCube skyBox;
+
+        private static GlObject glSphere;
+
+        private static GlObject glPlate;
+
         private static float Shininess = 50;
+
+        private static bool planeMovingForward = false;
+
+        private static Vector3D<float> planePosition = new(0f, 20f, 20f);
+
+        private static bool DrawWireFrameOnly = false;
 
         private const string ModelMatrixVariableName = "uModel";
         private const string NormalMatrixVariableName = "uNormal";
         private const string ViewMatrixVariableName = "uView";
         private const string ProjectionMatrixVariableName = "uProjection";
 
-        private static readonly string VertexShaderSource = @"
-        #version 330 core
-        layout (location = 0) in vec3 vPos;
-		layout (location = 1) in vec4 vCol;
-        layout (location = 2) in vec3 vNorm;
-
-        uniform mat4 uModel;
-        uniform mat3 uNormal;
-        uniform mat4 uView;
-        uniform mat4 uProjection;
-
-		out vec4 outCol;
-        out vec3 outNormal;
-        out vec3 outWorldPosition;
-        
-        void main()
-        {
-			outCol = vCol;
-            gl_Position = uProjection*uView*uModel*vec4(vPos.x, vPos.y, vPos.z, 1.0);
-            outNormal = uNormal*vNorm;
-            outWorldPosition = vec3(uModel*vec4(vPos.x, vPos.y, vPos.z, 1.0));
-        }
-        ";
+        private const string TextureUniformVariableName = "uTexture";
 
         private const string LightColorVariableName = "lightColor";
         private const string LightPositionVariableName = "lightPos";
         private const string ViewPosVariableName = "viewPos";
         private const string ShininessVariableName = "shininess";
 
-        private static readonly string FragmentShaderSource = @"
-        #version 330 core
-        
-        uniform vec3 lightColor;
-        uniform vec3 lightPos;
-        uniform vec3 viewPos;
-        uniform float shininess;
-
-        out vec4 FragColor;
-
-		in vec4 outCol;
-        in vec3 outNormal;
-        in vec3 outWorldPosition;
-
-        void main()
-        {
-            float ambientStrength = 0.2;
-            vec3 ambient = ambientStrength * lightColor;
-
-            float diffuseStrength = 0.3;
-            vec3 norm = normalize(outNormal);
-            vec3 lightDir = normalize(lightPos - outWorldPosition);
-            float diff = max(dot(norm, lightDir), 0.0);
-            vec3 diffuse = diff * lightColor * diffuseStrength;
-
-            float specularStrength = 0.5;
-            vec3 viewDir = normalize(viewPos - outWorldPosition);
-            vec3 reflectDir = reflect(-lightDir, norm);
-            float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) / max(dot(norm,viewDir), -dot(norm,lightDir));
-            vec3 specular = specularStrength * spec * lightColor;  
-
-            vec3 result = (ambient + diffuse + specular) * outCol.xyz;
-            FragColor = vec4(result, outCol.w);
-        }
-        ";
-
         static void Main(string[] args)
         {
             WindowOptions windowOptions = WindowOptions.Default;
             windowOptions.Title = "2 szeminárium";
-            windowOptions.Size = new Vector2D<int>(500, 500);
-            var resources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+            windowOptions.Size = new Vector2D<int>(1000, 1000);
+
             // on some systems there is no depth buffer by default, so we need to make sure one is created
             windowOptions.PreferredDepthBufferBits = 24;
 
@@ -133,7 +85,9 @@ namespace lab4_1
             {
                 keyboard.KeyDown += Keyboard_KeyDown;
             }
-
+            cameraDescriptor.DistanceBehind = 30f;
+            cameraDescriptor.HeightAbove = 10f;
+            cameraDescriptor.UpdatePlaneTransform(planePosition, Quaternion<float>.Identity);
             Gl = window.CreateOpenGL();
 
             controller = new ImGuiController(Gl, window, inputContext);
@@ -146,7 +100,7 @@ namespace lab4_1
             };
 
 
-            Gl.ClearColor(System.Drawing.Color.Black);
+            Gl.ClearColor(System.Drawing.Color.White);
 
             SetUpObjects();
 
@@ -163,13 +117,13 @@ namespace lab4_1
             uint vshader = Gl.CreateShader(ShaderType.VertexShader);
             uint fshader = Gl.CreateShader(ShaderType.FragmentShader);
 
-            Gl.ShaderSource(vshader, VertexShaderSource);
+            Gl.ShaderSource(vshader, ReadShader("VertexShader.vert"));
             Gl.CompileShader(vshader);
             Gl.GetShader(vshader, ShaderParameterName.CompileStatus, out int vStatus);
             if (vStatus != (int)GLEnum.True)
                 throw new Exception("Vertex shader failed to compile: " + Gl.GetShaderInfoLog(vshader));
 
-            Gl.ShaderSource(fshader, FragmentShaderSource);
+            Gl.ShaderSource(fshader, ReadShader("FragmentShader.frag"));
             Gl.CompileShader(fshader);
 
             program = Gl.CreateProgram();
@@ -185,6 +139,13 @@ namespace lab4_1
             Gl.DetachShader(program, fshader);
             Gl.DeleteShader(vshader);
             Gl.DeleteShader(fshader);
+        }
+
+        private static string ReadShader(string shaderFileName)
+        {
+            using (Stream shaderStream = typeof(Program).Assembly.GetManifestResourceStream("repulo.Shaders." + shaderFileName))
+            using (StreamReader shaderReader = new StreamReader(shaderStream))
+                return shaderReader.ReadToEnd();
         }
 
         private static void Keyboard_KeyDown(IKeyboard keyboard, Key key, int arg3)
@@ -213,20 +174,32 @@ namespace lab4_1
                 case Key.Space:
                     cubeArrangementModel.AnimationEnabeld = !cubeArrangementModel.AnimationEnabeld;
                     break;
+                case Key.W:
+                    planeMovingForward = !planeMovingForward; // move forward in -Z direction
+                    break;
+                case Key.A:
+                    planePosition.Y -= 1.0f;
+                    break;
+                case Key.C: // C for Camera mode
+                    cameraDescriptor.ToggleCameraMode();
+                    break;
             }
         }
 
         private static void Window_Update(double deltaTime)
         {
-            //Console.WriteLine($"Update after {deltaTime} [s].");
-            // multithreaded
-            // make sure it is threadsafe
-            // NO GL calls
             cubeArrangementModel.AdvanceTime(deltaTime);
-
             controller.Update((float)deltaTime);
-        }
 
+            if (planeMovingForward)
+            {
+                const float speed = 100f;
+                float distance = speed * (float)deltaTime;
+                planePosition.Z -= distance;
+            }
+            // Make sure to keep updating the camera with current position and rotation (even if not rotating yet)
+            cameraDescriptor.UpdatePlaneTransform(planePosition, Quaternion<float>.Identity);
+        }
         private static unsafe void Window_Render(double deltaTime)
         {
             //Console.WriteLine($"Render after {deltaTime} [s].");
@@ -234,6 +207,19 @@ namespace lab4_1
             // GL here
             Gl.Clear(ClearBufferMask.ColorBufferBit);
             Gl.Clear(ClearBufferMask.DepthBufferBit);
+
+            if (DrawWireFrameOnly)
+            {
+                Gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
+                Gl.Enable(EnableCap.LineSmooth);
+                Gl.LineWidth(0.5f);
+            }
+            else
+            {
+                Gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
+                Gl.Enable(EnableCap.LineSmooth);
+                Gl.LineWidth(0.5f);
+            }
 
 
             Gl.UseProgram(program);
@@ -246,20 +232,48 @@ namespace lab4_1
             SetViewerPosition();
             SetShininess();
 
-            DrawPulsingTeapot();
 
-            DrawRevolvingCube();
+            DrawSkyBox();
+            DrawPlane();
 
             //ImGuiNET.ImGui.ShowDemoWindow();
             ImGuiNET.ImGui.Begin("Lighting properties",
                 ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar);
             ImGuiNET.ImGui.SliderFloat("Shininess", ref Shininess, 1, 200);
+            ImGuiNET.ImGui.Checkbox("Draw only wireframe", ref DrawWireFrameOnly);
             ImGuiNET.ImGui.End();
 
 
             controller.Render();
         }
 
+        private static unsafe void DrawSkyBox()
+        {
+            var rotation = Matrix4X4.CreateRotationZ((float)(Math.PI / 2)); // 90 degrees in radians
+            Matrix4X4<float> modelMatrix = rotation * Matrix4X4.CreateScale(400f);
+            SetModelMatrix(modelMatrix);
+            Gl.BindVertexArray(skyBox.Vao);
+
+            int textureLocation = Gl.GetUniformLocation(program, TextureUniformVariableName);
+            if (textureLocation == -1)
+            {
+                throw new Exception($"{TextureUniformVariableName} uniform not found on shader.");
+            }
+            // set texture 0
+            Gl.Uniform1(textureLocation, 0);
+
+            Gl.ActiveTexture(TextureUnit.Texture0);
+            Gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (float)GLEnum.Linear);
+            Gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (float)GLEnum.Linear);
+            Gl.BindTexture(TextureTarget.Texture2D, skyBox.Texture.Value);
+
+            Gl.DrawElements(GLEnum.Triangles, skyBox.IndexArrayLength, GLEnum.UnsignedInt, null);
+            Gl.BindVertexArray(0);
+
+            CheckError();
+            Gl.BindTexture(TextureTarget.Texture2D, 0);
+            CheckError();
+        }
         private static unsafe void SetLightColor()
         {
             int location = Gl.GetUniformLocation(program, LightColorVariableName);
@@ -282,7 +296,8 @@ namespace lab4_1
                 throw new Exception($"{LightPositionVariableName} uniform not found on shader.");
             }
 
-            Gl.Uniform3(location, 0f, 10f, 0f);
+            Gl.Uniform3(location, 5f, 1f, 0f);
+            //Gl.Uniform3(location, cameraDescriptor.Position.X, cameraDescriptor.Position.Y, cameraDescriptor.Position.Z);
             CheckError();
         }
 
@@ -311,40 +326,36 @@ namespace lab4_1
             Gl.Uniform1(location, Shininess);
             CheckError();
         }
-
-        private static unsafe void DrawRevolvingCube()
+        private static unsafe void DrawPlane()
         {
-            // set material uniform to metal
-
-            Matrix4X4<float> diamondScale = Matrix4X4.CreateScale(1f);
-            Matrix4X4<float> rotx = Matrix4X4.CreateRotationX((float)Math.PI / 4f);
-            Matrix4X4<float> rotz = Matrix4X4.CreateRotationZ((float)Math.PI / 4f);
-            Matrix4X4<float> rotLocY = Matrix4X4.CreateRotationY((float)cubeArrangementModel.DiamondCubeAngleOwnRevolution);
-            Matrix4X4<float> trans = Matrix4X4.CreateTranslation(4f, 4f, 0f);
-            Matrix4X4<float> rotGlobY = Matrix4X4.CreateRotationY((float)cubeArrangementModel.DiamondCubeAngleRevolutionOnGlobalY);
-            Matrix4X4<float> modelMatrix = diamondScale * rotx * rotz * rotLocY * trans * rotGlobY;
-
+            // Model transformation: scale and translate
+            //var rotationY = Matrix4X4.CreateRotationY(MathF.PI);
+            var modelMatrix = Matrix4X4.CreateTranslation<float>(planePosition)
+                             * Matrix4X4.CreateScale(0.05f);
             SetModelMatrix(modelMatrix);
-            Gl.BindVertexArray(glCubeRotating.Vao);
-            Gl.DrawElements(GLEnum.Triangles, glCubeRotating.IndexArrayLength, GLEnum.UnsignedInt, null);
-            Gl.BindVertexArray(0);
-        }
 
-        private static unsafe void DrawPulsingTeapot()
-        {
-            // set material uniform to rubber
-            var rotationX = Matrix4X4.CreateRotationX(MathF.PI + MathF.PI/ 2f);
-            var modelMatrixForNewObject = Matrix4X4.CreateTranslation(0f, 1f, 0f) * Matrix4X4.CreateScale(0.3f) * rotationX;
-            SetModelMatrix(modelMatrixForNewObject);
-            Gl.BindVertexArray(teapot.Vao);
-            Gl.DrawElements(GLEnum.Triangles, teapot.IndexArrayLength, GLEnum.UnsignedInt, null);
-            Gl.BindVertexArray(0);
+            // Bind VAO
+            Gl.BindVertexArray(plane.Vao);
 
-            var modelMatrixForTable = Matrix4X4.CreateScale(1f, 1f, 1f);
-            SetModelMatrix(modelMatrixForTable);
-            Gl.BindVertexArray(table.Vao);
-            Gl.DrawElements(GLEnum.Triangles, table.IndexArrayLength, GLEnum.UnsignedInt, null);
+            // Set texture uniform
+            //int textureLocation = Gl.GetUniformLocation(program, TextureUniformVariableName); // e.g., "tex"
+            //if (textureLocation == -1)
+            //{
+            //    throw new Exception($"{TextureUniformVariableName} uniform not found in shader.");
+            //}
+
+            //Gl.Uniform1(textureLocation, 0); // Use texture unit 0
+            //Gl.ActiveTexture(TextureUnit.Texture0);
+            //Gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (float)GLEnum.Linear);
+            //Gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (float)GLEnum.Linear);
+            //Gl.BindTexture(TextureTarget.Texture2D, plane.Texture.Value); // Make sure this is valid!
+
+            // Draw
+            Gl.DrawElements(GLEnum.Triangles, plane.IndexArrayLength, GLEnum.UnsignedInt, null);
+
+            // Cleanup
             Gl.BindVertexArray(0);
+            Gl.BindTexture(TextureTarget.Texture2D, 0);
         }
 
         private static unsafe void SetModelMatrix(Matrix4X4<float> modelMatrix)
@@ -386,27 +397,26 @@ namespace lab4_1
             float[] face5Color = [0.0f, 1.0f, 1.0f, 1.0f];
             float[] face6Color = [1.0f, 1.0f, 0.0f, 1.0f];
 
-            teapot = ObjResourceReader.CreateTeapotWithColor(Gl, face1Color);
 
             float[] tableColor = [System.Drawing.Color.Azure.R/256f,
                                   System.Drawing.Color.Azure.G/256f,
                                   System.Drawing.Color.Azure.B/256f,
                                   1f];
-            table = GlCube.CreateSquare(Gl, tableColor);
 
-            glCubeRotating = GlCube.CreateCubeWithFaceColors(Gl, face1Color, face2Color, face3Color, face4Color, face5Color, face6Color);
+            plane = ObjResourceReader.CreateTeapotWithColor(Gl, face1Color);
+            skyBox = GlCube.CreateInteriorCube(Gl, "");
         }
 
         
 
         private static void Window_Closing()
         {
-            teapot.ReleaseGlObject();
+            plane.ReleaseGlObject();
         }
 
         private static unsafe void SetProjectionMatrix()
         {
-            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>((float)Math.PI / 4f, 1024f / 768f, 0.1f, 100);
+            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>((float)Math.PI / 4f, 1024f / 768f, 0.1f, 1000);
             int location = Gl.GetUniformLocation(program, ProjectionMatrixVariableName);
 
             if (location == -1)

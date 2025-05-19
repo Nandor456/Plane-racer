@@ -1,8 +1,9 @@
-﻿using Silk.NET.Maths;
+﻿using repulo;
+using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using System.Globalization;
 
-namespace lab4_1
+namespace repulo
 {
     internal class ObjResourceReader
     {
@@ -27,7 +28,7 @@ namespace lab4_1
             List<float[]> objNormals;
             List<List<FaceVertex>> objFaces;
 
-            ReadObjDataForTeapot(out objVertices, out objNormals, out objFaces);
+            ReadObjData(out objVertices, out objNormals, out objFaces);
 
             List<float> glVertices = new List<float>();
             List<float> glColors = new List<float>();
@@ -127,7 +128,7 @@ namespace lab4_1
             }
         }
 
-        private static unsafe void ReadObjDataForTeapot(out List<float[]> objVertices,
+        private static unsafe void ReadObjData(out List<float[]> objVertices,
             out List<float[]> objNormals, out List<List<FaceVertex>> objFaces)
         {
             objVertices = new List<float[]>();
@@ -135,12 +136,12 @@ namespace lab4_1
             objFaces = new List<List<FaceVertex>>();
 
             using (Stream objStream = typeof(ObjResourceReader).Assembly
-                .GetManifestResourceStream("lab4_1.Resources.minicooper.obj"))
+                .GetManifestResourceStream("repulo.Resources.plane.obj"))
             {
                 if (objStream == null)
                 {
                     throw new FileNotFoundException(
-                        "Could not find embedded resource 'lab4_1.Resources.minicooper.obj");
+                        "Could not find embedded resource 'repulo.Resources.plane.obj");
                 }
 
                 using (StreamReader objReader = new StreamReader(objStream))
