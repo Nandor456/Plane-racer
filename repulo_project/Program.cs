@@ -38,10 +38,10 @@ namespace repulo_project
 
         private static Vector3D<float> planePosition = new(0f, 10f, 0f);
         private static float planeYaw = 0f;
-        private static float planeSpeed = 30f;
+        private static float planeSpeed = 50f;
 
         private static float Shininess = 50;
-
+        private static int ringsPassed = 0;
         private static bool DrawWireFrameOnly = false;
 
         private const string ModelMatrixVariableName = "uModel";
@@ -62,6 +62,7 @@ namespace repulo_project
         private static bool cameraInFront = false;
         private static GlObject ringTorus;
         private static float planePitch = 0f;
+        private static uint ringProgram;
 
         static void Main(string[] args)
         {
@@ -93,15 +94,6 @@ namespace repulo_project
         private static void Window_Load()
         {
             inputContext = window.CreateInput();
-            foreach (var ring in rings)
-            {
-                float distance = Vector3D.Distance(planePosition, ring.Position);
-                if (distance < ring.Radius)
-                {
-                    Console.WriteLine("Passed through ring!");
-                    // Optionally remove or mark it
-                }
-            }
             Gl = window.CreateOpenGL();
             controller = new ImGuiController(Gl, window, inputContext);
             foreach (var keyboard in inputContext.Keyboards)
@@ -117,11 +109,43 @@ namespace repulo_project
 
             SetUpObjects();
             LinkProgram();
-
+            LinkRingProgram();
             Gl.Enable(EnableCap.DepthTest);
             Gl.DepthFunc(DepthFunction.Lequal);
         }
+        private static void LinkRingProgram()
+        {
+            uint vshader = Gl.CreateShader(ShaderType.VertexShader);
+            uint fshader = Gl.CreateShader(ShaderType.FragmentShader);
 
+            Gl.ShaderSource(vshader, ReadShader("VertexShader.vert")); // same vertex shader
+            Gl.CompileShader(vshader);
+            Gl.GetShader(vshader, ShaderParameterName.CompileStatus, out int vStatus);
+            if (vStatus != (int)GLEnum.True)
+                throw new Exception("Ring vertex shader failed to compile: " + Gl.GetShaderInfoLog(vshader));
+
+            Gl.ShaderSource(fshader, ReadShader("ringShader.frag")); // NEW RING FRAGMENT SHADER
+            Gl.CompileShader(fshader);
+            Gl.GetShader(fshader, ShaderParameterName.CompileStatus, out int fStatus);
+            if (fStatus != (int)GLEnum.True)
+                throw new Exception("Ring fragment shader failed to compile: " + Gl.GetShaderInfoLog(fshader));
+
+            ringProgram = Gl.CreateProgram();
+            Gl.AttachShader(ringProgram, vshader);
+            Gl.AttachShader(ringProgram, fshader);
+            Gl.LinkProgram(ringProgram);
+
+            Gl.GetProgram(ringProgram, GLEnum.LinkStatus, out var status);
+            if (status == 0)
+            {
+                Console.WriteLine($"Error linking ring shader program: {Gl.GetProgramInfoLog(ringProgram)}");
+            }
+
+            Gl.DetachShader(ringProgram, vshader);
+            Gl.DetachShader(ringProgram, fshader);
+            Gl.DeleteShader(vshader);
+            Gl.DeleteShader(fshader);
+        }
         private static void LinkProgram()
         {
             uint vshader = Gl.CreateShader(ShaderType.VertexShader);
@@ -167,7 +191,12 @@ namespace repulo_project
         private static void Window_Update(double deltaTime)
         {
             float dt = (float)deltaTime;
-
+            foreach (var ring in rings)
+            {
+                float t = (float)window.Time; // or accumulate time yourself
+                float offset = MathF.Sin(t * ring.AnimationSpeed + ring.AnimationPhase) * ring.AnimationDistance;
+                ring.Position = ring.BasePosition + new Vector3D<float>(offset, 0f, 0f); // moves left-right (X axis)
+            }
             foreach (var keyboard in inputContext.Keyboards)
             {
                 bool turning = false;
@@ -202,7 +231,20 @@ namespace repulo_project
                     rollTarget = 0f;
                 }
             }
-
+            foreach (var ring in rings)
+            {
+                if (!ring.Passed)
+                {
+                    float distance = Vector3D.Distance(planePosition, ring.Position);
+                    if (distance < ring.Radius)
+                    {
+                        ring.Passed = true;
+                        ringsPassed++;
+                        ring.Color = new Vector4D<float>(1f, 0f, 0f, 1f);
+                        Console.WriteLine($"Passed through ring! Total: {ringsPassed}");
+                    }
+                }
+            }
             cameraDescriptor.TargetPosition = planePosition;
             planeRoll = Lerp(planeRoll, rollTarget, rollSpeed * dt);
             planeRoll = Clamp(planeRoll, -maxRoll, maxRoll);
@@ -223,34 +265,30 @@ namespace repulo_project
 
             Gl.UseProgram(program);
 
-            SetViewMatrix();
-            SetProjectionMatrix();
-
-            SetLightColor();
-            SetLightPosition();
-            SetViewerPosition();
-            SetShininess();
+            SetLightColor(program);
+            SetLightPosition(program);
+            SetViewerPosition(program);
+            SetShininess(program);
 
             DrawPlane();
 
             DrawSkyBox();
             DrawRings();
-            //ImGuiNET.ImGui.ShowDemoWindow();
-            ImGuiNET.ImGui.Begin("Lighting properties",
-                ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar);
-            ImGuiNET.ImGui.SliderFloat("Shininess", ref Shininess, 1, 200);
-            ImGuiNET.ImGui.Checkbox("Draw only wireframe", ref DrawWireFrameOnly);
+            ImGuiNET.ImGui.Begin("Game Info",
+            ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar);
+            ImGuiNET.ImGui.Text($"Rings passed: {ringsPassed}");
             ImGuiNET.ImGui.End();
-
-
             controller.Render();
         }
 
         private static unsafe void DrawSkyBox()
         {
+            Gl.UseProgram(program);
+            SetViewMatrix(program);
+            SetProjectionMatrix(program);
             var rotation = Matrix4X4.CreateRotationZ((float)(Math.PI / 2));
             Matrix4X4<float> modelMatrix = Matrix4X4.CreateScale(400f) * rotation;
-            SetModelMatrix(modelMatrix);
+            SetModelMatrix(modelMatrix, program);
             Gl.BindVertexArray(skyBox.Vao);
 
             int textureLocation = Gl.GetUniformLocation(program, TextureUniformVariableName);
@@ -276,32 +314,45 @@ namespace repulo_project
 
         private static unsafe void DrawRings()
         {
+            Gl.UseProgram(ringProgram);
+            SetViewMatrix(ringProgram);
+            SetProjectionMatrix(ringProgram);
             foreach (var ring in rings)
             {
-                var translation = ring.RotationMatrix * Matrix4X4.CreateTranslation(ring.Position);
-                SetModelMatrix(translation);
+                var modelMatrix = ring.RotationMatrix * Matrix4X4.CreateTranslation(ring.Position);
+                SetModelMatrix(modelMatrix, ringProgram); // ✅ pass the correct shader
+
+                int colorLocation = Gl.GetUniformLocation(ringProgram, "uColor");
+                if (colorLocation != -1)
+                {
+                    Gl.Uniform4(colorLocation, ring.Color.X, ring.Color.Y, ring.Color.Z, ring.Color.W);
+                }
+
+                SetLightColor(ringProgram);       // ✅
+                SetLightPosition(ringProgram);    // ✅
+                SetViewerPosition(ringProgram);   // ✅
+                SetShininess(ringProgram);        // ✅
+
                 Gl.BindVertexArray(ring.Torus.Vao);
                 Gl.DrawElements(GLEnum.Triangles, ring.Torus.IndexArrayLength, GLEnum.UnsignedInt, null);
                 Gl.BindVertexArray(0);
             }
         }
 
-        private static unsafe void SetLightColor()
-        {
-            int location = Gl.GetUniformLocation(program, LightColorVariableName);
 
+        private static unsafe void SetLightColor(uint programId)
+        {
+            int location = Gl.GetUniformLocation(programId, LightColorVariableName);
             if (location == -1)
-            {
                 throw new Exception($"{LightColorVariableName} uniform not found on shader.");
-            }
 
             Gl.Uniform3(location, 1f, 1f, 1f);
             CheckError();
         }
 
-        private static unsafe void SetLightPosition()
+        private static unsafe void SetLightPosition(uint programId)
         {
-            int location = Gl.GetUniformLocation(program, LightPositionVariableName);
+            int location = Gl.GetUniformLocation(programId, LightPositionVariableName);
 
             if (location == -1)
             {
@@ -313,9 +364,9 @@ namespace repulo_project
             CheckError();
         }
 
-        private static unsafe void SetViewerPosition()
+        private static unsafe void SetViewerPosition(uint programId)
         {
-            int location = Gl.GetUniformLocation(program, ViewPosVariableName);
+            int location = Gl.GetUniformLocation(programId, ViewPosVariableName);
 
             if (location == -1)
             {
@@ -326,9 +377,9 @@ namespace repulo_project
             CheckError();
         }
 
-        private static unsafe void SetShininess()
+        private static unsafe void SetShininess(uint programId)
         {
-            int location = Gl.GetUniformLocation(program, ShininessVariableName);
+            int location = Gl.GetUniformLocation(programId, ShininessVariableName);
 
             if (location == -1)
             {
@@ -341,6 +392,9 @@ namespace repulo_project
 
         private static unsafe void DrawPlane()
         {
+            Gl.UseProgram(program);
+            SetViewMatrix(program);
+            SetProjectionMatrix(program);
             var rotationYaw = Matrix4X4.CreateRotationY(planeYaw);
             var rotationPitch = Matrix4X4.CreateRotationX(planePitch);
             var rotationRoll = Matrix4X4.CreateRotationZ(planeRoll);
@@ -348,7 +402,7 @@ namespace repulo_project
             var translation = Matrix4X4.CreateTranslation(planePosition);
 
             var modelMatrix = scale * rotationRoll * rotationPitch * rotationYaw * translation;
-            SetModelMatrix(modelMatrix);
+            SetModelMatrix(modelMatrix, program);
 
             Gl.BindVertexArray(plane.Vao);
             Gl.DrawElements(GLEnum.Triangles, plane.IndexArrayLength, GLEnum.UnsignedInt, null);
@@ -356,13 +410,11 @@ namespace repulo_project
         }
 
 
-        private static unsafe void SetModelMatrix(Matrix4X4<float> modelMatrix)
+        private static unsafe void SetModelMatrix(Matrix4X4<float> modelMatrix, uint programId)
         {
-            int location = Gl.GetUniformLocation(program, ModelMatrixVariableName);
+            int location = Gl.GetUniformLocation(programId, ModelMatrixVariableName);
             if (location == -1)
-            {
                 throw new Exception($"{ModelMatrixVariableName} uniform not found on shader.");
-            }
 
             Gl.UniformMatrix4(location, 1, false, (float*)&modelMatrix);
             CheckError();
@@ -376,14 +428,15 @@ namespace repulo_project
             Matrix4X4<float> modelInvers;
             Matrix4X4.Invert<float>(modelMatrixWithoutTranslation, out modelInvers);
             Matrix3X3<float> normalMatrix = new Matrix3X3<float>(Matrix4X4.Transpose(modelInvers));
-            location = Gl.GetUniformLocation(program, NormalMatrixVariableName);
+
+            location = Gl.GetUniformLocation(programId, NormalMatrixVariableName);
             if (location == -1)
-            {
                 throw new Exception($"{NormalMatrixVariableName} uniform not found on shader.");
-            }
+
             Gl.UniformMatrix3(location, 1, false, (float*)&normalMatrix);
             CheckError();
         }
+
 
         private static unsafe void SetUpObjects()
         {
@@ -407,29 +460,26 @@ namespace repulo_project
             //2 z tengely
             //3 y tengely
             //min max 200f
-            var ring = new Ring(new Vector3D<float>(20f, 30f, 50f), 3f, GlObject.CreateTorus(Gl, 40f, 3f));
-            ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
-            rings.Add(ring);
-            var ring2 = new Ring(new Vector3D<float>(150f, 150f, 50f), 3f, GlObject.CreateTorus(Gl, 40f, 3f));
-            ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
-            rings.Add(ring);
-            var ring3 = new Ring(new Vector3D<float>(-150f, -150f, 100f), 3f, GlObject.CreateTorus(Gl, 40f, 3f));
-            ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
-            rings.Add(ring);
-            var ring4 = new Ring(new Vector3D<float>(0f, 150f, -100f), 3f, GlObject.CreateTorus(Gl, 40f, 3f));
-            ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
-            rings.Add(ring);
-            var ring5 = new Ring(new Vector3D<float>(50f, 70f, -20f), 3f, GlObject.CreateTorus(Gl, 40f, 3f));
-            ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
-            rings.Add(ring);
-            rings.Add(ring2);
-            rings.Add(ring3);
-            rings.Add(ring4);
-            rings.Add(ring5);
-            rings.Add(new Ring(new Vector3D<float>(10f, 15f, 100f), 3f, GlObject.CreateTorus(Gl, 40f, 3f)));
-            rings.Add(new Ring(new Vector3D<float>(-10f, 20f, 150f), 3f, GlObject.CreateTorus(Gl, 40f, 3f)));
+            Random rng = new();
 
+            for (int i = 0; i < 5; i++)
+            {
+                float x = rng.NextSingle() * 300f - 150f; // [-150, 150]
+                float y = rng.NextSingle() * 300f - 150f;
+                float z = rng.NextSingle() * 300f - 150f;
 
+                var pos = new Vector3D<float>(x, y, z);
+                var torus = GlObject.CreateTorus(Gl, 40f, 1f);
+                var ring = new Ring(pos, 40f, torus);
+                var rotate = rng.Next(2);
+                Console.WriteLine(rotate);
+                if (rotate == 0)
+                {
+                    ring.RotationMatrix = Matrix4X4.CreateRotationX(MathF.PI / 2);
+                }
+                ring.AnimationPhase = (float)(rng.NextDouble() * MathF.PI * 2); // optional: start at random animation point
+                rings.Add(ring);
+            }
         }
 
 
@@ -439,29 +489,26 @@ namespace repulo_project
             plane.ReleaseGlObject();
         }
 
-        private static unsafe void SetProjectionMatrix()
+        private static unsafe void SetProjectionMatrix(uint programId)
         {
-            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>((float)Math.PI / 4f, 1024f / 768f, 0.1f, 1000);
-            int location = Gl.GetUniformLocation(program, ProjectionMatrixVariableName);
+            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>(
+                (float)Math.PI / 4f, 1024f / 768f, 0.1f, 1000f);
+            int location = Gl.GetUniformLocation(programId, ProjectionMatrixVariableName);
 
             if (location == -1)
-            {
-                throw new Exception($"{ViewMatrixVariableName} uniform not found on shader.");
-            }
+                throw new Exception($"{ProjectionMatrixVariableName} uniform not found on shader.");
 
             Gl.UniformMatrix4(location, 1, false, (float*)&projectionMatrix);
             CheckError();
         }
 
-        private static unsafe void SetViewMatrix()
+        private static unsafe void SetViewMatrix(uint programId)
         {
             var viewMatrix = Matrix4X4.CreateLookAt(cameraDescriptor.Position, cameraDescriptor.Target, cameraDescriptor.UpVector);
-            int location = Gl.GetUniformLocation(program, ViewMatrixVariableName);
+            int location = Gl.GetUniformLocation(programId, ViewMatrixVariableName);
 
             if (location == -1)
-            {
                 throw new Exception($"{ViewMatrixVariableName} uniform not found on shader.");
-            }
 
             Gl.UniformMatrix4(location, 1, false, (float*)&viewMatrix);
             CheckError();
